@@ -23,10 +23,6 @@ package io.github.realguystuff.ChattClient;
 import java.io.*;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Objects;
 import java.util.Scanner;
 
@@ -36,7 +32,8 @@ public class Client {
     private BufferedWriter buffWriter;
     private final String username;
     private static String ip;
-    private static final String version = "b0.1.0_2";
+    private static final String version = "b0.1.1";
+    private static String Username;
 
 
     public Client(Socket socket, String username) {
@@ -70,6 +67,7 @@ public class Client {
                     System.out.println("client: | /whoami   | Tells you your username.      |");
                     System.out.println("client: | /rickroll | Gives rickroll links.         |");
                     System.out.println("client: | /version  | Gives the current version.    |");
+                    System.out.println("client: | /leave    | Leaves the server.            |");
                     System.out.println("client: ---------------------------------------------");
                 } else if (Objects.equals(messageToSend, "/whoami")) {
                     System.out.println("client: You are \""+username+"\".");
@@ -78,13 +76,16 @@ public class Client {
                     System.out.println("client: Official Music Video: https://www.youtube.com/watch?v=dQw4w9WgXcQ");
                     System.out.println("client: Different link #1: https://www.youtube.com/watch?v=iik25wqIuFo");
                     System.out.println("client: Different link #2: https://www.youtube.com/watch?v=xvFZjo5PgG0");
-                    System.out.println("client: Different link #3: ttps://www.youtube.com/watch?v=8ybW48rKBME");
+                    System.out.println("client: Different link #3: https://www.youtube.com/watch?v=8ybW48rKBME");
                     System.out.println("client: Different link #4: https://www.youtube.com/watch?v=p7YXXieghto");
                     System.out.println("client: Different link #5: https://www.youtube.com/watch?v=QB7ACr7pUuE");
                 } else if (Objects.equals(messageToSend, "/version")) {
                     System.out.println("client: You are running client version "+version);
                 } else if (Objects.equals(messageToSend, "/ip")) {
                     System.out.println("client: You are on "+ip+":5000");
+                } else if (Objects.equals(messageToSend, "/leave")) {
+                    System.out.println("Leaving the server...");
+                    closeAll(socket, buffReader, buffWriter);
                 } else {
                     buffWriter.write(username + ": " + messageToSend);
                     buffWriter.newLine();
@@ -125,6 +126,7 @@ public class Client {
             if (socket != null) {
                 socket.close();
             }
+            main2();
         } catch (IOException e) {
             System.err.println("Error CL4");
             closeAll(socket, buffReader, buffWriter);
@@ -132,7 +134,30 @@ public class Client {
         }
     }
 
-    public static void main(String[] args) throws IOException, NoSuchAlgorithmException, SQLException {
+    public static void main2() throws IOException {
+        System.out.println("Running client version "+version);
+        Scanner sc = new Scanner(System.in);
+
+        System.out.println("Enter the IP address you want to join (do not add :5000 to the end of the IP): ");
+        System.out.print("> ");
+        ip = sc.nextLine();
+
+        try {
+            System.out.println("Connecting you to " + ip + ":5000 as " + Username + "...");
+            Socket socket = new Socket(ip, 5000);
+            Client client = new Client(socket, Username);
+            System.out.println("Connection successful!");
+            client.readMessage();
+            client.sendMessage();
+        } catch (UnknownHostException e) {
+            System.err.println("Error CL5: UnknownHostException");
+            e.printStackTrace();
+            System.out.println("hint: CL5 usually means that you have typed in the IP wrong (maybe you added \":5000\").");
+            main2();
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
         Console console = System.console();
         if (console == null) {
             System.err.println("No console available. Error CL7");
@@ -141,53 +166,24 @@ public class Client {
         System.out.println("Running client version "+version);
         Scanner sc = new Scanner(System.in);
         System.out.print("Enter your username: ");
-        String username = sc.nextLine().toLowerCase();
-        System.out.print("Enter your password: ");
-        char[] passwordChars = console.readPassword();
-        // Convert the password to a String
-        String password = new String(passwordChars);
+        System.out.print("> ");
+        Username = sc.nextLine();
 
-        System.out.println("Checking password...");
+        System.out.println("Enter the IP address you want to join (do not add :5000 to the end of the IP): ");
+        System.out.print("> ");
+        ip = sc.nextLine();
 
-        // Hash the password using SHA-512 algorithm
-        MessageDigest md = MessageDigest.getInstance("SHA-512");
-        byte[] hashedPassword = md.digest(password.getBytes());
-
-        // Convert the hashed password to a hexadecimal representation
-        StringBuilder sb = new StringBuilder();
-        for (byte b : hashedPassword) {
-            sb.append(String.format("%02x", b));
-        }
-        String hashedPasswordStr = sb.toString();
-        Arrays.fill(passwordChars, ' ');
-        System.out.println("Authenticating (this may take a while)...");
-        // Perform the database check using the username and hashed password
-        Database database = new Database();
-        boolean isValidUser = database.call("SELECT * FROM authenticated WHERE username = '" + username + "' AND pw = '" + hashedPasswordStr + "'").next();
-
-        database.close();
-        if (isValidUser) {
-            System.out.println("Authentication successful!");
-            System.out.println("Enter the IP address you want to join (do not add :5000 to the end of the IP): ");
-            System.out.print("> ");
-            ip = sc.nextLine();
-
-            try {
-                System.out.println("Connecting you to " + ip + ":5000 as " + username + "...");
-                Socket socket = new Socket(ip, 5000);
-                Client client = new Client(socket, username);
-                System.out.println("Connection successful!");
-                client.readMessage();
-                client.sendMessage();
-            } catch (UnknownHostException e) {
-                System.err.println("Error CL5: UnknownHostException");
-                e.printStackTrace();
-                System.out.println("hint: CL5 usually means that you have typed in the IP wrong (maybe you added \":5000\").");
-                main(args);
-            }
-        } else {
-            System.out.println("Error CL6: AuthenticationException");
-            System.out.println("hint: CL6 usually means that you have typed in your username or password wrong, or the username doesn't exist in the database (try signing UP on the website)");
+        try {
+            System.out.println("Connecting you to " + ip + ":5000 as " + Username + "...");
+            Socket socket = new Socket(ip, 5000);
+            Client client = new Client(socket, Username);
+            System.out.println("Connection successful!");
+            client.readMessage();
+            client.sendMessage();
+        } catch (UnknownHostException e) {
+            System.err.println("Error CL5: UnknownHostException");
+            e.printStackTrace();
+            System.out.println("hint: CL5 usually means that you have typed in the IP wrong (maybe you added \":5000\").");
             main(args);
         }
     }
