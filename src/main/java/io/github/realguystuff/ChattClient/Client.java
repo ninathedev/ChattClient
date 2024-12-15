@@ -23,8 +23,13 @@ package io.github.realguystuff.ChattClient;
 import java.io.*;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.security.*;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
 import java.util.Objects;
 import java.util.Scanner;
+
+
 
 public class Client {
     private final Socket socket;
@@ -49,9 +54,10 @@ public class Client {
         }
     }
 
-    public void sendMessage() {
+    public void sendMessage(PrivateKey privateKey, PublicKey publicKey) {
         try {
-            buffWriter.write(username);
+            String publicKeyString = Base64.getEncoder().encodeToString(publicKey.getEncoded());
+            buffWriter.write(username+" "+publicKeyString);
             buffWriter.newLine();
             buffWriter.flush();
 
@@ -87,12 +93,13 @@ public class Client {
                     System.out.println("Leaving the server...");
                     closeAll(socket, buffReader, buffWriter);
                 } else {
-                    buffWriter.write(username + ": " + messageToSend);
+                    String signedMessage = DigitalSignatureUtil.signMessage(messageToSend, privateKey);
+                    buffWriter.write(username + ": " + messageToSend + " [SIGNATURE: " + signedMessage + "]");
                     buffWriter.newLine();
                     buffWriter.flush();
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             System.err.println("Error CL2");
             closeAll(socket, buffReader, buffWriter);
             throw new RuntimeException(e);
@@ -105,8 +112,22 @@ public class Client {
             while (socket.isConnected()) {
                 try {
                     msgFromGroupChat = buffReader.readLine();
-                    System.out.println(msgFromGroupChat);
-                } catch (IOException e) {
+                    if (msgFromGroupChat != null && msgFromGroupChat.contains("[SIGNATURE: ") && msgFromGroupChat.contains("[PUBLICKEY: ")) {
+                        String[] parts = msgFromGroupChat.split(" \\[SIGNATURE: | \\[PUBLICKEY: ");
+                        String message = parts[0];
+                        String signature = parts[1].replace("]", "");
+                        String publicKeyString = parts[2].replace("]", "");
+                        PublicKey publicKey = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(publicKeyString)));
+                        boolean isVerified = DigitalSignatureUtil.verifyMessage(message, signature, publicKey);
+                        if (isVerified) {
+                            System.out.println(msgFromGroupChat);
+                        } else {
+                            System.out.println("(Incorrect signature)"+msgFromGroupChat);
+                        }
+                    } else {
+                        System.out.println("(Unsigned)"+msgFromGroupChat);
+                    }
+                } catch (Exception e) {
                     System.err.println("Error CL3");
                     closeAll(socket, buffReader, buffWriter);
                     throw new RuntimeException(e);
@@ -131,10 +152,16 @@ public class Client {
             System.err.println("Error CL4");
             closeAll(socket, buffReader, buffWriter);
             throw new RuntimeException(e);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
         }
     }
 
-    public static void main2() throws IOException {
+    public static void main2() throws IOException, NoSuchAlgorithmException {
+        KeyPair keyPair = KeyPairGeneratorUtil.generateKeyPair();
+        PublicKey publicKey = keyPair.getPublic();
+        PrivateKey privateKey = keyPair.getPrivate();
+
         System.out.println("Running client version "+version);
         Scanner sc = new Scanner(System.in);
 
@@ -148,7 +175,7 @@ public class Client {
             Client client = new Client(socket, Username);
             System.out.println("Connection successful!");
             client.readMessage();
-            client.sendMessage();
+            client.sendMessage(privateKey, publicKey);
         } catch (UnknownHostException e) {
             System.err.println("Error CL5: UnknownHostException");
             e.printStackTrace();
@@ -157,7 +184,11 @@ public class Client {
         }
     }
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, NoSuchAlgorithmException {
+        KeyPair keyPair = KeyPairGeneratorUtil.generateKeyPair();
+        PublicKey publicKey = keyPair.getPublic();
+        PrivateKey privateKey = keyPair.getPrivate();
+
         Console console = System.console();
         if (console == null) {
             System.err.println("No console available. Error CL7");
@@ -178,8 +209,8 @@ public class Client {
             Socket socket = new Socket(ip, 5000);
             Client client = new Client(socket, Username);
             System.out.println("Connection successful!");
-            client.readMessage();
-            client.sendMessage();
+            client.readMessage(publicKey);
+            client.sendMessage(privateKey, publicKey);
         } catch (UnknownHostException e) {
             System.err.println("Error CL5: UnknownHostException");
             e.printStackTrace();
