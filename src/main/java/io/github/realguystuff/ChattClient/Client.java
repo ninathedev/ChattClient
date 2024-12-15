@@ -40,7 +40,6 @@ public class Client {
     private static final String version = "b0.1.1";
     private static String Username;
 
-
     public Client(Socket socket, String username) {
         try {
             this.socket = socket;
